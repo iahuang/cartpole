@@ -1,4 +1,4 @@
-# Theory
+# Cartpole Theory
 
 ## REINFORCE
 
@@ -15,7 +15,7 @@ $$R(\tau)=\sum_{t=0}\gamma^{t} r_t$$
 
 The maximization objective is the expected return over rollouts $\tau$.
 
-$$J(\theta)=\mathbb{E}_{\tau\sim \pi_\theta}[R(\tau)]$$
+$$\mathcal J(\theta)=\mathbb{E}_{\tau\sim \pi_\theta}[R(\tau)]$$
 
 The issue is that the distribution generating $\tau$ itself depends on $\theta$, therefore computing $\nabla_\theta J(\theta)$ is intractable.
 
@@ -56,5 +56,88 @@ REINFORCE follows the given steps:
 
 - Roll out $N$ trajectories under $\pi_\theta$.
 - Compute $G_t$ over all $t$ for all $\tau$. Typically, you would subtract the mean of $G_t$ from $G_t$ to reduce variance.
-- Compute $J(\theta)=\mathbb{E}_{\tau\sim \pi_{\theta}}[R(\tau)]$.
-- Update $\theta \gets \theta + \alpha \nabla_\theta J(\theta)$ 
+- Compute $\mathcal J(\theta)=\mathbb{E}_{\tau\sim \pi_{\theta}}[R(\tau)]$ with $\mathcal{L}=-\mathcal{J}$
+- Gradient descent update:  $\theta \gets \theta - \alpha \nabla_\theta \mathcal L(\theta)$ 
+
+### Further Improvements to REINFORCE
+
+#### Entropy Regularization
+
+A known pathology of reinforcement learning methods is policy collapse, wherein early on the model collapses on outputting a constant action or other degenerate policy. The *entropy* of the modeled distribution $\pi_\theta$ serves as a useful indicator of possible policy collapse.
+
+We define the entropy of $\pi_\theta$ as
+
+$$H[\pi_\theta(\cdot \mid s)]=-\sum_{a} \pi_\theta(a\mid s)\,\log \pi(a \mid s)$$
+
+measured in *nats*. The intuition here is that entropy is the expected "surprise", quantifying the spread of the distribution. A uniform distribution maximizes entropy, whereas a degenerate, constant-peak policy minimizes entropy.
+
+A common improvement therefore is to add $H[\pi_\theta(\cdot \mid s)]$ as a regularization term to the loss function
+
+$$\mathcal L(\theta)=-\mathcal{J}(\theta)-\beta H[\pi_\theta(\cdot \mid s)]$$
+
+with some small $\beta$, usually something like $\beta=0.01$.
+
+# PPO
+
+## Advantage
+
+Let $V^\pi$ and $Q^\pi$ be functions representing the *expectation* of the return following the policy $\pi$ from the given state and from the given state and action respectively.
+
+$$V^\pi(s)= \mathbb{E}_{\pi}[G_t\mid s_t=s]\quad Q^\pi(s,a)= \mathbb{E}_\pi[G_t\mid s_t=s,a_t=a]$$
+
+The advantage is the difference between $Q$ and $V$
+
+$$A^\pi(s,a)=Q^\pi(s,a)-V^\pi(s)$$
+
+Given some state $s$ and action $a$, $A^\pi(s,a)$ tells us the expected gain in return following over the baseline.
+
+An observed return $G_t$ is an unbiased single-sample estimator of $Q^\pi(s_t, a_t)$. Therefore
+
+$$G_t - V^\pi(s_t)$$
+
+is an unbiased single-sample estimator of $A^\pi(s_t, a_t)$. The return *is* the Monte Carlo advantage estimate, up to subtracting a baseline.
+
+Why subtract the baseline at all?
+
+1. The policy gradient theorem says $\nabla J = \mathbb{E}[\nabla \log \pi(a|s) \cdot Q^\pi(s,a)]$. You can subtract any function $b(s)$ that depends only on the state without changing the expected gradient, because $\mathbb{E}_{a \sim \pi}[\nabla \log \pi(a|s) \cdot b(s)] = 0$. So replacing $Q$ with $Q - V = A$ is free in expectation.
+2. The variance is much lower. Raw returns can be large positive numbers everywhere; the gradient then has to learn from the differences between them. Advantages are centered around zero by construction — $\mathbb{E}_{a \sim \pi}[A^\pi(s,a)] = 0$ for every state — so the signal is exactly "did this action do better or worse than typical," which is what you actually want to upweight or downweight.
+
+### Hierarchy of Baselines
+
+The hierarchy of baselines in policy gradient, ordered roughly by how much variance they kill:
+
+1. No baseline: $\nabla \log \pi(a_t|s_t) \cdot G_t$.
+2. Constant baseline (e.g. batch mean $\bar{G}$): unbiased because a constant satisfies $\mathbb{E}_a[\nabla \log \pi \cdot c] = 0$. Variance reduction is modest — it only removes the overall offset, nothing state-specific.
+3. State-dependent baseline $V_\phi(s_t)$ as an approximator of $V^\pi(s_t)$: subtracts the *conditional* mean given $s_t$. Strictly tighter than (2) because it adapts to the state. This is the actor-critic setup.
+
+The reason a state-dependent baseline gives you more variance reduction than a constant one is that $V^\pi(s_t)$ is the best state-only predictor of $G_t$ in the mean-squared sense. Subtracting it removes more of the variance in $G_t$ than subtracting any constant could. (You can keep going: a state-action baseline $Q(s,a)$ would be even tighter, but it's not a valid baseline because $\mathbb{E}_a[\nabla \log \pi \cdot Q(s,a)] \neq 0$. So $V$ is the sweet spot.)
+
+## Generalized Advantage Estimation (GAE)
+
+As before, the advantage exists as a lower-variance return metric in the context of policy optimization. Assuming some approximator $V_\phi(s)$ for $V^\pi(s)$, we have two choices of obtaining an estimate for $A$:
+
+- Single sample Monte Carlo estimate of $Q^\pi$ given as $G_t-V_\phi(s)$. Very high variance, but unbiased.
+- Bootstrapped $V$ over one step: Let $\delta_t=r_t+\gamma V_\phi(s_{t+1})-V(s_t)$. Low variance, but heavily biased by $V$.
+
+A compromise is to use an $n$-step estimator. Let the *temporal difference *(TD) residual  $\delta_t=r_t+\gamma V_\phi(s_{t+1})-V(s_t)$. Then,
+
+$$\hat{A}_t^{(n)}=\sum_{k=0}^n\gamma^{k}\delta_{k+t}$$
+
+The choice of $n$ varies between relying on actual rewards (low bias) versus the value function (high variance).
+
+GAE takes an exponentially weighted average over all choices of $n$.
+
+$$\hat{A}_t^{\text{GAE}}=(1-\lambda)\sum_{n=1}^\infty \lambda^{n-1}\hat{A}_t^{(n)}$$
+
+This can be simplified into the form
+
+$$\hat{A}_t^{\text{GAE}}=\sum_{k=0}^\infty(\gamma\lambda)^k\delta_{k+t}$$
+
+or the recursion
+
+The choice of $\lambda$ interpolates between
+
+- $\lambda=0$ with $\hat{A}_t=\delta_t$ being one-step boostrapped TD
+- $\lambda =1$ with $\hat{A}_t=G_t-V(s_t)$.
+
+Typical values put $\lambda$ close to 1.

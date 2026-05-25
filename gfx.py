@@ -5,6 +5,7 @@ attributes) plus the pole half-length, and it draws a frame.
 """
 
 import math
+from typing import Callable
 
 import pygame
 
@@ -16,12 +17,14 @@ class CartPoleRenderer:
         height: int = 420,
         world_width: float = 5.0,
         track_y_frac: float = 0.7,
+        cart_center_x: int | None = None,
     ):
         self.width = width
         self.height = height
         self.world_width = world_width
         self.scale = width / world_width  # pixels per meter
         self.track_y = int(height * track_y_frac)
+        self.cart_center_x = cart_center_x if cart_center_x is not None else width // 2
 
         self.bg = (245, 246, 250)
         self.track_color = (60, 60, 70)
@@ -49,7 +52,7 @@ class CartPoleRenderer:
         self.big_font = pygame.font.SysFont(None, 44)
 
     def _world_to_screen_x(self, x: float) -> int:
-        return int(self.width / 2 + x * self.scale)
+        return int(self.cart_center_x + x * self.scale)
 
     def draw(
         self,
@@ -57,6 +60,8 @@ class CartPoleRenderer:
         pole_length: float,
         info: list[str] | None = None,
         overlay: str | None = None,
+        *,
+        extra_draw: Callable[[pygame.Surface], None] | None = None,
     ) -> None:
         assert self.screen is not None, "call init() before draw()"
         self.screen.fill(self.bg)
@@ -99,6 +104,9 @@ class CartPoleRenderer:
             surf = self.big_font.render(overlay, True, self.overlay_color)
             rect = surf.get_rect(center=(self.width // 2, self.height // 2 - 40))
             self.screen.blit(surf, rect)
+
+        if extra_draw is not None:
+            extra_draw(self.screen)
 
         pygame.display.flip()
 
