@@ -16,7 +16,7 @@ from cartpole import CartPole, CartPoleConfig
 from gfx import CartPoleRenderer
 from models import ACTION_DIM, STATE_FEATURE_DIM, CartPolePolicy, parameterize_state
 
-ARTIFACT_PATH = Path("./.artifacts/ppo.pt")
+ARTIFACT_PATH = Path("./.artifacts/ppo_swingup.pt")
 
 
 def load_policy(pi: CartPolePolicy) -> bool:
@@ -37,7 +37,7 @@ class NetworkViz:
     the next layer), with alpha proportional to its magnitude.
     """
 
-    INPUT_LABELS = ["x", "xd", "th", "thd"]
+    INPUT_LABELS = ["x", "xd", "sin", "cos", "thd"]
     OUTPUT_LABELS = ["L", "0", "R"]
 
     def __init__(self, pi: CartPolePolicy, panel_rect: pygame.Rect):
@@ -52,8 +52,12 @@ class NetworkViz:
 
         col_xs = self._three_columns()
         self.input_pos = self._column_positions(col_xs[0], self.input_dim, margin_y=40)
-        self.hidden_pos = self._column_positions(col_xs[1], self.hidden_dim, margin_y=20)
-        self.output_pos = self._column_positions(col_xs[2], self.output_dim, margin_y=40)
+        self.hidden_pos = self._column_positions(
+            col_xs[1], self.hidden_dim, margin_y=20
+        )
+        self.output_pos = self._column_positions(
+            col_xs[2], self.output_dim, margin_y=40
+        )
 
     def _three_columns(self) -> tuple[int, int, int]:
         left = self.rect.left + 35
@@ -61,15 +65,14 @@ class NetworkViz:
         mid = (left + right) // 2
         return left, mid, right
 
-    def _column_positions(self, x: int, n: int, *, margin_y: int) -> list[tuple[int, int]]:
+    def _column_positions(
+        self, x: int, n: int, *, margin_y: int
+    ) -> list[tuple[int, int]]:
         top = self.rect.top + margin_y
         bottom = self.rect.bottom - margin_y
         if n == 1:
             return [(x, (top + bottom) // 2)]
-        return [
-            (x, int(top + i * (bottom - top) / (n - 1)))
-            for i in range(n)
-        ]
+        return [(x, int(top + i * (bottom - top) / (n - 1))) for i in range(n)]
 
     @staticmethod
     def _activation_color(value: float, scale: float) -> tuple[int, int, int]:
@@ -106,7 +109,7 @@ class NetworkViz:
                     continue
                 alpha = int(255 * strength)
                 if c >= 0:
-                    color = (220, 90, 60, alpha)   # warm
+                    color = (220, 90, 60, alpha)  # warm
                 else:
                     color = (60, 130, 220, alpha)  # cool
                 pygame.draw.line(surf, color, src_pos[i], dst_pos[j], 1)
@@ -173,23 +176,33 @@ class NetworkViz:
 
         # Neurons.
         self._draw_neurons(
-            screen, self.input_pos, inp,
-            radius=9, labels=self.INPUT_LABELS, label_side="left",
+            screen,
+            self.input_pos,
+            inp,
+            radius=9,
+            labels=self.INPUT_LABELS,
+            label_side="left",
         )
         self._draw_neurons(
-            screen, self.hidden_pos, hid,
+            screen,
+            self.hidden_pos,
+            hid,
             radius=6,
         )
         argmax = int(logits.argmax().item())
         self._draw_neurons(
-            screen, self.output_pos, logits,
-            radius=10, labels=self.OUTPUT_LABELS, label_side="right",
+            screen,
+            self.output_pos,
+            logits,
+            radius=10,
+            labels=self.OUTPUT_LABELS,
+            label_side="right",
             highlight=argmax,
         )
 
 
 def main() -> None:
-    config = CartPoleConfig()
+    config = CartPoleConfig(ruleset="swing_up")
     env = CartPole(config)
     pi = CartPolePolicy()
 

@@ -1,6 +1,9 @@
 import math
 import random
 from dataclasses import dataclass, replace
+from typing import Literal
+
+Ruleset = Literal["keep_up", "swing_up"]
 
 
 @dataclass(frozen=True)
@@ -16,6 +19,9 @@ class CartPoleConfig:
     init_perturb: float = (
         0.05  # max |value| for uniform init noise on each state component
     )
+    # "keep_up": terminate on |x| > x_threshold OR |theta| > theta_threshold.
+    # "swing_up": terminate only on |x| > x_threshold (pole can spin freely).
+    ruleset: Ruleset = "keep_up"
 
 
 @dataclass
@@ -48,10 +54,13 @@ class CartPole:
             self.state = replace(state)
         else:
             p = self.config.init_perturb
+            # swing_up: pole starts hanging straight down (theta ≈ π).
+            # keep_up: pole starts near upright (theta ≈ 0).
+            theta_center = math.pi if self.config.ruleset == "swing_up" else 0.0
             self.state = CartPoleState(
                 x=self._rng.uniform(-p, p),
                 x_dot=self._rng.uniform(-p, p),
-                theta=self._rng.uniform(-p, p),
+                theta=theta_center + self._rng.uniform(-p, p),
                 theta_dot=self._rng.uniform(-p, p),
             )
         self.steps = 0
@@ -88,5 +97,8 @@ class CartPole:
 
         self.state = CartPoleState(x, x_dot, theta, theta_dot)
         self.steps += 1
-        self.done = abs(x) > c.x_threshold or abs(theta) > c.theta_threshold
+        if c.ruleset == "swing_up":
+            self.done = abs(x) > c.x_threshold
+        else:
+            self.done = abs(x) > c.x_threshold or abs(theta) > c.theta_threshold
         return self.state, self.done

@@ -35,6 +35,15 @@ class CartPoleRewardConfig:
     # non-negative. No penalty is applied on the very first step.
     action_change_penalty: float = 0.0
 
+    # Bowl-shaped penalty on (E − E*)², where
+    #   E  = ½·I·θ̇² + m·g·L·(1 + cos θ)     (current mechanical energy)
+    #   E* = 2·m·g·L                          (energy at upright stationary)
+    # with I = (4/3)·m·L² (uniform rod about its end; matches the cartpole
+    # simulator's physics). At E = E* the term is zero; over- or
+    # under-pumping is penalized symmetrically. Classical energy-based
+    # swing-up shaping. Should be non-negative; positive = stronger bowl.
+    w_energy_target_penalty: float = 0.0
+
 
 def run_rollout(
     pi: CartPolePolicy,
@@ -80,12 +89,22 @@ def run_rollout(
             )
             next_state, done = env.step(action)
             delta_a = 0 if prev_action is None else (action - prev_action)
+            m = env_config.pole_mass
+            L = env_config.pole_length
+            I = (4.0 / 3.0) * m * L * L
+            energy = (
+                0.5 * I * next_state.theta_dot * next_state.theta_dot
+                + m * env_config.gravity * L * (1 + math.cos(next_state.theta))
+            )
+            energy_target = 2.0 * m * env_config.gravity * L
+            energy_err = energy - energy_target
             reward = (
                 rwd_config.w_time_alive
                 + rwd_config.w_cosine_angle * math.cos(next_state.theta)
                 + rwd_config.w_rel_distance
                 * (1 - abs(next_state.x) / env_config.x_threshold)
                 - rwd_config.action_change_penalty * (delta_a * delta_a)
+                - rwd_config.w_energy_target_penalty * (energy_err * energy_err)
             )
             rollout.append(
                 RolloutEntry(

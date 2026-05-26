@@ -1,3 +1,4 @@
+import math
 from typing import override
 
 import torch
@@ -6,12 +7,22 @@ from cartpole import CartPoleState
 
 
 def parameterize_state(state: CartPoleState) -> torch.Tensor:
+    # θ is encoded as (sin θ, cos θ) so the network sees a bounded,
+    # continuous, 2π-periodic angle representation — important for swing-up
+    # where the pole can wrap around through ±π.
     return torch.tensor(
-        [state.x, state.x_dot, state.theta, state.theta_dot], dtype=torch.float32
+        [
+            state.x,
+            state.x_dot,
+            math.sin(state.theta),
+            math.cos(state.theta),
+            state.theta_dot,
+        ],
+        dtype=torch.float32,
     )
 
 
-STATE_FEATURE_DIM = 4
+STATE_FEATURE_DIM = 5
 ACTION_DIM = 3
 
 
