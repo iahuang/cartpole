@@ -10,8 +10,8 @@ A PyTorch implementation of the classic CartPole reinforcement learning task I w
   gfx.py            Drawing utilities
   models.py         Base policy, value MLP definitions
   play.py           Interactive human-play simulation
-  ppo.py            PPO training loop
-  ppo.py            PPO training loop
+  ppo.py            PPO training loop for stabilizing (keep-up) task
+  ppo_swingup.py    PPO training loop for swing-up task
   reinforce.py      Vanilla REINFORCE training loop
   rl.py             Base RL training utilities
   watch.py          Watch a trained model play
